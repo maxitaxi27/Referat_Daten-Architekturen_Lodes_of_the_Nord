@@ -2,4 +2,77 @@
 %!TEX root = ../main.tex
 
 \chapter{Grundlagen}
-Ausgehend von der Aufgabenstellung ist der derzeitige Stand der Technik für die Lösungsfindung zu beschreiben. Es sind z.B. die Vor- und Nachteile bisheriger Lösungen bzw. fundamentaler Lösungsprinzipien fundiert von und ggf. anderen Quellen darzulegen.
+
+\section{Entwicklung von Graphdatenbanken und Neo4j}
+
+Graphdatenbanken entstanden nicht erst mit aktuellen Systemen aus dem Bereich \ac{NoSQL}. Erste Modelle verbreiteten sich in den 1980er- und frühen 1990er-Jahren. Danach verloren sie gegenüber räumlichen, semistrukturierten und Ansätzen auf Basis der \ac{XML} vorübergehend an Bedeutung. Der wachsende Bedarf, inhärent vernetzte Informationen zu verwalten, rückte sie erneut in den Fokus der Datenbankforschung \cite{angles2008survey}.
+
+Neo4j ging aus einem konkreten Leistungsproblem bei der Abbildung vernetzter Daten in relationalen Datenbanken hervor. Laut der Selbstdarstellung des Herstellers begann die Entwicklung eines Prototyps im Jahr 2000. Eine erste Version entstand 2002 und lief ab 2003 produktiv. Im Jahr 2007 gründeten die Entwickler das Unternehmen hinter Neo4j und veröffentlichten den Quellcode unter der GNU General Public License. Version~1.0 folgte 2010 \cite{neo4j2026company}. Diese Angaben beschreiben wichtige Produktmeilensteine, stammen jedoch nicht aus einer unabhängigen historischen Untersuchung.
+
+Mit Cypher erhielt Neo4j 2011 eine speziell auf Property Graphs ausgerichtete Abfragesprache \cite{neo4j2026cypher}. Später öffnete das openCypher-Projekt die Sprache für weitere Implementierungen. Francis et al. beschrieben 2018 Cypher~9, formalisierten den lesenden Sprachkern und ordneten ihn als erste Version ein, die eine herstellerübergreifende Implementierungsgruppe verwaltete \cite{francis2018cypher}. Damit entwickelte sich Cypher von einer internen Neo4j-Sprache zu einer Abfragesprache, die auch andere Systeme einsetzen.
+
+\section{Datenbanktyp und Einordnung}
+
+Neo4j ist eine operative Graphdatenbank und gehört zur Gruppe der \ac{NoSQL}-Daten\-banksysteme. Graphdatenbanken modellieren sowohl das Schema als auch die gespeicherten Instanzen als Graph oder als Erweiterung eines Graphen. Sie bearbeiten Daten mit graphorientierten Operationen \cite{angles2008survey}. Dieser Ansatz unterscheidet sich von relationalen Datenbanken, die Entitäten in Tabellen ablegen und Beziehungen durch übereinstimmende Schlüsselwerte ausdrücken.
+
+Neo4j verwendet einen \ac{LPG}. Das System speichert und verarbeitet den Graphen nativ, sodass das logische Graphmodell bis in die Speicherschicht reicht \cite{neo4j2026overview}. Neo4j legt Beziehungen somit als eigenständige Datenelemente ab und bildet sie nicht nur als Abstraktion über einem anderen Datenmodell. Davon zu unterscheiden sind Systeme, die das \ac{RDF} verwenden und Aussagen als Subjekt-Prädikat-Objekt-Tripel darstellen.
+
+Abbildung~\ref{fig:lpg-model} veranschaulicht die Elemente des Modells an zwei verbundenen Personen.
+
+\begin{figure}[htbp]
+	\centering
+	\begin{tikzpicture}[
+		entity/.style={circle, draw=chapterBlue, fill=blue!8, thick, minimum size=22mm, align=center},
+		property/.style={draw=black!45, fill=black!3, rounded corners=2pt, align=left, font=\footnotesize, inner sep=4pt},
+		graph edge/.style={-{Latex[length=2.2mm]}, draw=chapterBlue, thick}
+	]
+		\node[entity] (anna) {\texttt{:Person}\\\textbf{Anna}};
+		\node[entity, right=4.5cm of anna] (ben) {\texttt{:Person}\\\textbf{Ben}};
+		\node[property, above=8mm of anna] (anna-props) {\texttt{name: Anna}\\\texttt{alter: 31}};
+		\node[property, above=8mm of ben] (ben-props) {\texttt{name: Ben}\\\texttt{alter: 29}};
+		\draw[dashed, draw=black!55] (anna-props) -- (anna);
+		\draw[dashed, draw=black!55] (ben-props) -- (ben);
+		\draw[graph edge] (anna) -- node[above, fill=white, inner sep=2pt] {\texttt{KENNT}} node[below, fill=white, inner sep=2pt, font=\footnotesize] {\texttt{seit: 2022}} (ben);
+	\end{tikzpicture}
+	\caption{Elemente eines Labeled Property Graph. Eigene Darstellung in Anlehnung an \cite{angles2017foundations,neo4j2026concepts}.}
+	\label{fig:lpg-model}
+\end{figure}
+
+Das Datenmodell ist schemaoptional, aber nicht grundsätzlich schemafrei. Anwendungen können Knoten, Beziehungen und Eigenschaften ohne vorab festgelegtes Schema anlegen. Bei Bedarf sichern Constraints fachliche Regeln, während Indizes den Datenzugriff beschleunigen \cite{neo4j2026concepts}. Neo4j führt Änderungen außerdem in Transaktionen aus und gewährleistet dabei \ac{ACID} \cite{neo4j2026overview}. Die flexible Struktur hebt daher weder Integritätsregeln noch transaktionale Garantien auf.
+
+\section{Elemente des Property-Graph-Modells}
+
+Ein \ac{LPG} besteht aus Knoten und gerichteten Beziehungen. Knoten repräsentieren fachliche Entitäten und können beliebig viele Labels tragen. Ein Label ordnet einen Knoten einer benannten Menge zu, beispielsweise \texttt{Person} oder \texttt{Produkt}. Beziehungen verbinden jeweils einen Start- mit einem Zielknoten und besitzen genau einen Typ. Der Typ \texttt{KENNT} kann etwa zwei Personen verbinden. Sowohl Knoten als auch Beziehungen dürfen Eigenschaften als Schlüssel-Wert-Paare speichern \cite{angles2017foundations,neo4j2026concepts}. Eine Eigenschaft der Beziehung kann dadurch beispielsweise angeben, seit wann sich zwei Personen kennen.
+
+Diese Elemente bilden Pfade. Ein Pfad ist eine Folge von Knoten und den verbindenden Beziehungen; seine Länge entspricht der Zahl der Beziehungen. Eine Traversierung folgt ausgewählten Beziehungen durch den Graphen und besucht dabei nur den für die Anfrage relevanten Teil. Labels und Beziehungstypen geben den Elementen fachliche Bedeutung, Eigenschaften ergänzen konkrete Werte. Das Modell bildet Beziehungen daher direkt ab, statt sie erst während einer Abfrage aus Fremdschlüsseln zu ermitteln.
+
+\section{Abfragen mit Cypher}
+
+Cypher ist die deklarative Abfragesprache von Neo4j und fragt \ac{LPG} ab. Eine Anfrage beschreibt das gesuchte Ergebnis, nicht den physischen Ablauf der Traversierung. Ihre Syntax stellt Graphmuster visuell dar: Runde Klammern kennzeichnen Knoten, eckige Klammern Beziehungen und Pfeile deren Richtung. Der Ausdruck \texttt{(p)-[:KENNT]->(f)} beschreibt beispielsweise zwei Personen und eine gerichtete Beziehung zwischen ihnen. Die Klausel \texttt{MATCH} sucht ein solches Muster, \texttt{WHERE} schränkt Treffer ein und \texttt{RETURN} bestimmt das Ergebnis \cite{neo4j2026cypher}.
+
+Abbildung~\ref{fig:cypher-pattern} ordnet dem textuellen Muster den passenden Teilgraphen und das zurückgegebene Ergebnis zu.
+
+\begin{figure}[htbp]
+	\centering
+	\resizebox{0.98\linewidth}{!}{%
+		\begin{tikzpicture}[
+			query/.style={draw=black!60, fill=black!3, rounded corners=2pt, align=left, font=\small, inner sep=6pt},
+			entity/.style={circle, draw=chapterBlue, fill=blue!8, thick, minimum size=19mm, align=center},
+			result/.style={draw=green!50!black, fill=green!8, rounded corners=2pt, align=center, minimum width=22mm, minimum height=14mm},
+			flow/.style={-{Latex[length=2.2mm]}, draw=black!65, thick},
+			graph edge/.style={-{Latex[length=2.2mm]}, draw=chapterBlue, thick}
+		]
+			\node[query] (query) {\texttt{MATCH (p:Person)-[:KENNT]->(f:Person)}\\\texttt{WHERE p.name = 'Anna'}\\\texttt{RETURN f.name}};
+			\node[entity, right=28mm of query] (anna) {\texttt{p}\\Anna};
+			\node[entity, right=27mm of anna] (ben) {\texttt{f}\\Ben};
+			\node[result, right=15mm of ben] (result) {Ergebnis\\\texttt{Ben}};
+			\draw[flow] (query) -- node[above, font=\scriptsize] {Musterabgleich} (anna);
+			\draw[graph edge] (anna) -- node[above, fill=white, inner sep=2pt, font=\scriptsize] {\texttt{KENNT}} (ben);
+			\draw[flow] (ben) -- node[above, font=\scriptsize] {\texttt{RETURN}} (result);
+		\end{tikzpicture}%
+	}
+	\caption{Zusammenhang zwischen Cypher-Muster, Teilgraph und Ergebnis. Eigene Darstellung in Anlehnung an \cite{neo4j2026cypher}.}
+	\label{fig:cypher-pattern}
+\end{figure}
+
+Der Musterabgleich und navigierende Ausdrücke bilden die beiden grundlegenden Mechanismen moderner Graphabfragesprachen \cite{angles2017foundations}. Cypher verbindet beide: Feste Muster erfassen bekannte Strukturen, während Pfadausdrücke Beziehungen über eine variable Anzahl von Schritten verfolgen können. Die Sprache verarbeitet Ergebnisse zugleich tabellarisch und unterstützt Filter, Projektionen sowie Aggregationen. Dadurch kann sie Graphstrukturen ausdrücken und dennoch vertraute deklarative Operationen verwenden \cite{francis2018cypher}.

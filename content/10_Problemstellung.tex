@@ -1,13 +1,19 @@
 %!TEX root = ../main.tex
 
 \chapter{Einleitung}
-Die Einleitung soll den Ausgangspunkt der Arbeit umreißen, in kurzer Form zur Problemstellung hinführen und das Interesse der lesenden Person für die Arbeit wecken. Allgemeine Einleitung ins Thema, keine Unternehmens- oder Produktbeschreibungen, Organigramme u.ä., wenn diese nicht direkt zum Thema führen. Ziele und Vorgehensweise nicht vermischen.
+
+Viele Anwendungsdomänen erzeugen Daten, deren Aussagekraft wesentlich aus ihren Beziehungen entsteht. Beispiele sind soziale und logistische Netze, Wissensgraphen oder Systeme zur Betrugserkennung. Graphdatenbanken bilden solche Strukturen als Graph ab und stellen graphorientierte Operationen bereit \cite{angles2008survey}. Damit rücken Verbindungen und Pfade in den Mittelpunkt des Datenmodells, während relationale Systeme Beziehungen über Schlüssel und Verbundoperationen rekonstruieren.
+
+Diese unterschiedliche Modellierung wird besonders relevant, wenn Abfragen Pfade variabler Länge oder wiederkehrende Beziehungsmuster untersuchen. Moderne Graphabfragesprachen unterstützen dafür vor allem Musterabgleich und Navigation im Graphen \cite{angles2017foundations}. Neo4j eignet sich als Untersuchungsgegenstand, weil das System das Property-Graph-Modell mit der deklarativen Abfragesprache Cypher verbindet.
 
 \section{Problemstellung}
 
-\section{Ziel}
+Beziehungsreiche Daten lassen sich auch relational speichern. Mit wachsender Pfadtiefe steigt jedoch die Zahl der benötigten Verbundoperationen, und die Abfrage bildet die fachliche Struktur nur noch indirekt ab. Zu klären ist daher, wie Neo4j vernetzte Daten modelliert und abfragt, welche technischen Entscheidungen diesen Ansatz prägen und welche Grenzen daraus folgen. Das \ac{DBMS} Neo4j bildet den Untersuchungsgegenstand; allgemeine Graphverarbeitung ohne persistente Datenhaltung gehört nicht dazu.
+
+\section{Zielsetzung}
+
+Die Arbeit ordnet Neo4j wissenschaftlich ein und bewertet, für welche Anforderungen das System einen geeigneten Ansatz bietet. Dazu erläutert sie Entwicklung, Datenmodell, Architektur und Abfragesprache. Eine praktische Implementierung prüft anschließend ausgewählte Eigenschaften und schafft die Grundlage für den Vergleich mit einem relationalen \ac{DBMS}.
 
 \section{Vorgehensweise}
 
-\section{Aufgabenstellung}
-Die Fragestellung der Aufgabe ist zu präzisieren. Insbesondere sind das Umfeld, die vorhandenen Randbedingungen und Betrachtungsgrenzen darzustellen.
+Zunächst führt die Arbeit die fachlichen Grundlagen und zentralen Begriffe ein. Danach untersucht sie Architektur, Speicherung und Konsistenzmodell sowie typische Einsatzfelder und Einschränkungen. Abschließend dokumentiert und bewertet sie die Installation und das Projektbeispiel anhand nachvollziehbarer Abfragen.

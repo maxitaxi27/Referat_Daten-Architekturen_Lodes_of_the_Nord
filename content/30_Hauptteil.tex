@@ -1,5 +1,132 @@
 %!TEX root = ../main.tex
 
-\chapter{Hauptteil}
+\chapter{Architektur und Datenhaltung}
 
-Der Text soll knapp und klar sein und die wesentlichen Gedanken der Arbeit beinhalten. Ein gewähltes Verfahren oder ein bestimmter Lösungsweg muss begründet werden. Es ist nicht notwendig, alle Vorversuche einzeln zu schildern. Bei Versuchen sind Voraussetzungen und Vernachlässigungen sowie die Anordnung, Leistungsfähigkeit und Messgenauigkeit der Versuchsanordnung anzugeben. \\ Die Ergebnisse der Arbeit sind unter Berücksichtigung der Voraussetzungen ausführlich zu diskutieren und mit den bereits bekannten Anschauungen und Erfahrungen zu vergleichen. \\ Ziel der Arbeit ist es, eindeutige Folgerungen und Richtlinien für die Praxis zu finden.
+\section{Architektonischer Aufbau}
+
+Neo4j verbindet eine Cypher-Abfrageverarbeitung mit einer nativen Graphspeicherung und einer Transaktionsschicht. Eine Clientanwendung sendet eine deklarative Cypher-Anfrage an das \ac{DBMS}. Neo4j zerlegt und prüft die Anfrage zunächst syntaktisch. Danach wählt der kostenbasierte Planner anhand von Indizes, Constraints und gespeicherten Statistiken einen logischen Ausführungsplan. Der Runtime übersetzt diesen Plan in physische Operatoren und führt ihn gegen die Speicherschicht aus \cite{neo4j2026queryplans}. Diese Trennung erlaubt es, die physische Ausführung zu ändern, ohne die deklarative Anfrage anzupassen.
+
+Der Ausführungsplan sucht in der Regel zuerst geeignete Startknoten. Dafür kann Neo4j einen Index verwenden oder Knoten mit einem bestimmten Label durchsuchen. Anschließend folgen Expand-Operatoren den gespeicherten Beziehungen. Besta et al. ordnen Neo4j deshalb als native, auf das \ac{LPG}-Modell spezialisierte Graphdatenbank ein \cite{besta2023demystifying}. Anders als ein Graphaufsatz auf einem relationalen oder dokumentorientierten Backend bildet Neo4j die Nachbarschaften direkt in seiner eigenen Speicherschicht ab.
+
+Abbildung~\ref{fig:query-processing} fasst den Weg einer Anfrage von der Clientanwendung bis zur Speicherschicht zusammen.
+
+\begin{figure}[htbp]
+	\centering
+	\resizebox{0.98\linewidth}{!}{%
+		\begin{tikzpicture}[
+			stage/.style={draw=chapterBlue, fill=blue!7, thick, rounded corners=2pt, align=center, minimum width=25mm, minimum height=14mm, inner sep=4pt},
+			flow/.style={-{Latex[length=2.3mm]}, draw=chapterBlue, thick},
+			node distance=7mm
+		]
+			\node[stage] (client) {Client-\\anwendung};
+			\node[stage, right=of client] (parser) {Cypher-\\Parser};
+			\node[stage, right=of parser] (planner) {Kostenbasierter\\Planner};
+			\node[stage, right=of planner] (runtime) {Cypher-\\Runtime};
+			\node[stage, right=of runtime, fill=green!8, draw=green!50!black] (storage) {Graph- und\\Speicherschicht};
+			\draw[flow] (client) -- (parser);
+			\draw[flow] (parser) -- (planner);
+			\draw[flow] (planner) -- (runtime);
+			\draw[flow] (runtime) -- (storage);
+			\draw[flow, bend left=28] (storage.south) to (client.south);
+		\end{tikzpicture}%
+	}
+	\caption{Vereinfachte Verarbeitung einer Cypher-Anfrage. Eigene Darstellung in Anlehnung an \cite{neo4j2026queryplans}.}
+	\label{fig:query-processing}
+\end{figure}
+
+\section{Physische Datenorganisation}
+
+Die Forschung beschreibt Neo4js klassische Speicherorganisation als record-basiert. Knoten-, Beziehungs- und Eigenschaftsrecords enthalten Kennungen und Verweise auf zusammengehörige Records. Ein Knoten verweist auf seine angrenzenden Beziehungen; ein Beziehungsrecord verweist wiederum auf die beiden verbundenen Knoten und auf weitere Beziehungen in deren Nachbarschaften. Große Eigenschaftswerte liegen in getrennten dynamischen Bereichen. Eine Anfrage muss Eigenschaften daher nur laden, wenn sie diese tatsächlich auswertet \cite{besta2023demystifying}.
+
+Direkte Verweise ermöglichen eine indexfreie Nachbarschaft: Nachdem Neo4j einen Startknoten gefunden hat, folgt es den gespeicherten Verweisen, ohne für jeden Schritt einen globalen Index abzufragen. Der Aufwand einer Traversierung hängt damit vor allem vom besuchten Teilgraphen und nicht unmittelbar von der Gesamtzahl aller Knoten ab \cite{besta2023demystifying}. Der Begriff \emph{indexfrei} gilt jedoch nur für das Folgen von Beziehungen. Um einen Startknoten über ein Label oder einen Eigenschaftswert zu finden, bleiben Indizes relevant. Zudem können Cache-Fehler und Datenträgerzugriffe die Laufzeit erhöhen, wenn die benötigten Records nicht im Arbeitsspeicher liegen.
+
+Abbildung~\ref{fig:record-storage} abstrahiert die direkten Verweise der klassischen record-basierten Organisation.
+
+\begin{figure}[htbp]
+	\centering
+	\begin{tikzpicture}[
+		record/.style={draw=chapterBlue, fill=blue!7, thick, rounded corners=2pt, align=left, minimum width=37mm, minimum height=21mm, font=\footnotesize, inner sep=5pt},
+		property/.style={draw=orange!70!black, fill=orange!8, rounded corners=2pt, align=center, minimum width=42mm, minimum height=13mm, font=\footnotesize},
+		pointer/.style={-{Latex[length=2.1mm]}, draw=chapterBlue, thick},
+		node distance=16mm
+	]
+		\node[record] (node-a) {\textbf{Knotenrecord A}\\\texttt{ID: 17}\\\texttt{erste Beziehung: 42}};
+		\node[record, right=of node-a] (relationship) {\textbf{Beziehungsrecord}\\\texttt{ID: 42}\\\texttt{Start: 17, Ziel: 23}};
+		\node[record, right=of relationship] (node-b) {\textbf{Knotenrecord B}\\\texttt{ID: 23}\\\texttt{erste Beziehung: 42}};
+		\node[property, below=11mm of relationship] (properties) {Eigenschaftsrecords\\\texttt{name}, \texttt{seit}, weitere Werte};
+		\draw[pointer] (node-a) -- node[above, fill=white, inner sep=1pt, font=\scriptsize] {Verweis} (relationship);
+		\draw[pointer] (relationship) -- node[above, fill=white, inner sep=1pt, font=\scriptsize] {Verweis} (node-b);
+		\draw[pointer, dashed] (node-a.south) -- (properties.west);
+		\draw[pointer, dashed] (relationship.south) -- (properties.north);
+		\draw[pointer, dashed] (node-b.south) -- (properties.east);
+	\end{tikzpicture}
+	\caption{Vereinfachte record-basierte Datenorganisation mit direkten Verweisen. Eigene Darstellung in Anlehnung an \cite{besta2023demystifying,neo4j2026storeformats}.}
+	\label{fig:record-storage}
+\end{figure}
+
+Die konkrete Anordnung hängt von Edition und Store-Format ab. Ältere sowie weiterhin unterstützte Record-Formate organisieren Graphdaten in verketteten Strukturen. Das aktuelle Block-Format der Enterprise Edition legt häufig gemeinsam benötigte Knoten-, Beziehungs- und Eigenschaftsdaten dagegen möglichst nah beieinander ab. Kleine Werte speichert es direkt; wachsende Entitäten und große Werte verschiebt es in dynamische Bereiche. Für Knoten mit sehr vielen Beziehungen nutzt es baumbasierte Strukturen, die nach Beziehungstyp und Richtung ordnen \cite{neo4j2026storeformats}. Die wissenschaftlich beschriebene Record-Architektur erklärt somit das Grundprinzip der direkten Adjazenz, während die aktuelle Implementierung die physische Anordnung weiterentwickelt.
+
+\section{Persistenz und Wiederherstellung}
+
+Neo4j speichert den Graphen dauerhaft in Store-Dateien und schützt Änderungen mit einem Write-ahead-Transaktionsprotokoll. Dieses Protokoll erfasst die Änderungen einer Transaktion an Daten, Indizes und Constraints. Erst ein erfolgreicher Commit macht die Transaktion dauerhaft. Store-Seiten können zunächst verändert im Page Cache verbleiben, weil das Transaktionsprotokoll die noch nicht ausgeschriebenen Änderungen absichert und das \ac{DBMS} so die \ac{ACID}-Eigenschaft der Dauerhaftigkeit erfüllt \cite{neo4j2026internals}.
+
+Ein Checkpoint schreibt ausstehende Änderungen aus dem flüchtigen Speicher in die Store-Dateien. Nach einem Absturz liest Neo4j das Protokoll ab dem letzten Checkpoint und wiederholt bestätigte Transaktionen, deren Änderungen noch nicht vollständig im Store vorliegen. Regelmäßige Checkpoints begrenzen daher die für eine Wiederherstellung nötige Protokollmenge. Erst danach darf Neo4j ältere Protokolldateien entfernen \cite{neo4j2026checkpointing}. Dieser Ablauf trennt die schnelle Transaktionsbestätigung vom späteren, gebündelten Schreiben der Datenseiten, ohne die Dauerhaftigkeit bestätigter Änderungen aufzugeben.
+
+Abbildung~\ref{fig:transaction-recovery} stellt den Zusammenhang zwischen Commit, Page Cache, Checkpoint und Wiederherstellung dar.
+
+\begin{figure}[htbp]
+	\centering
+	\begin{tikzpicture}[
+		component/.style={draw=chapterBlue, fill=blue!7, thick, rounded corners=2pt, align=center, minimum width=34mm, minimum height=14mm, inner sep=4pt},
+		store/.style={draw=green!50!black, fill=green!8, thick, rounded corners=2pt, align=center, minimum width=38mm, minimum height=14mm, inner sep=4pt},
+		flow/.style={-{Latex[length=2.2mm]}, draw=chapterBlue, thick},
+		recovery/.style={-{Latex[length=2.2mm]}, draw=orange!80!black, thick, dashed},
+		node distance=11mm and 14mm
+	]
+		\node[component] (transaction) {1. Schreib-\\transaktion};
+		\node[component, right=of transaction] (log) {2. Write-ahead-\\Transaktionsprotokoll};
+		\node[component, right=of log] (commit) {3. Commit\\bestätigt};
+		\node[component, below=of transaction] (cache) {Veränderte Seiten\\im Page Cache};
+		\node[store, right=of cache] (store) {Store-Dateien\\nach Checkpoint};
+		\draw[flow] (transaction) -- (log);
+		\draw[flow] (log) -- (commit);
+		\draw[flow] (transaction) -- (cache);
+		\draw[flow] (cache) -- (store);
+		\draw[recovery] (log.south) -- node[right, fill=white, inner sep=1pt, font=\scriptsize] {Recovery} (store.north);
+	\end{tikzpicture}
+	\caption{Transaktionsprotokoll, Checkpoint und Wiederherstellung. Eigene Darstellung in Anlehnung an \cite{neo4j2026internals,neo4j2026checkpointing}.}
+	\label{fig:transaction-recovery}
+\end{figure}
+
+\section{Verarbeitung im Arbeitsspeicher}
+
+Neo4j ist keine reine In-Memory-Datenbank. Die Store-Dateien bilden die dauerhafte Datenbasis; ein eigener Page Cache hält häufig benötigte Datenseiten und native Indizes im Arbeitsspeicher. Bei einem Cache-Treffer liest die Speicherschicht direkt aus dem \ac{RAM}. Fehlt eine Seite, lädt Neo4j sie vom Datenträger und verdrängt bei Bedarf eine andere Seite. Das System kann daher Graphen verarbeiten, die größer als der verfügbare Arbeitsspeicher sind. Die Antwortzeit hängt dann jedoch stärker von Zugriffslokalität, Cache-Größe und Datenträgerleistung ab \cite{besta2023demystifying,neo4j2026memory}.
+
+Abbildung~\ref{fig:memory-architecture} grenzt die Speicherbereiche des Servers von der persistenten Datenhaltung ab.
+
+\begin{figure}[htbp]
+	\centering
+	\resizebox{0.92\linewidth}{!}{%
+	\begin{tikzpicture}[
+		memory/.style={draw=chapterBlue, fill=blue!7, thick, rounded corners=2pt, align=center, minimum width=34mm, minimum height=16mm, inner sep=4pt},
+		store/.style={draw=green!50!black, fill=green!8, thick, rounded corners=2pt, align=center, minimum width=58mm, minimum height=15mm, inner sep=4pt},
+		flow/.style={<->, >=Latex, draw=chapterBlue, thick},
+		node distance=18mm
+	]
+		\node[memory] (heap) {JVM-Heap\\Objekte und Abfragen};
+		\node[memory, right=of heap] (native) {Native Bereiche\\Off-Heap-Daten};
+		\node[memory, right=of native] (cache) {Page Cache\\Daten und Indizes};
+		\node[draw=black!55, rounded corners=3pt, fit=(heap)(native)(cache), inner sep=8mm, label={[anchor=north west, font=\small\bfseries]north west:Arbeitsspeicher des Servers}] (ram) {};
+		\node[store, below=15mm of native] (disk) {Persistenter Datenträger\\Store-Dateien und Transaktionsprotokolle};
+		\draw[flow] (heap) -- node[above, fill=white, inner sep=1pt, font=\scriptsize] {Verarbeitung} (native);
+		\draw[flow] (native) -- node[above, fill=white, inner sep=1pt, font=\scriptsize] {Datenzugriff} (cache);
+		\draw[flow] (cache.south) to[bend left=18] node[right, font=\scriptsize, align=left] {Seiten laden\\und schreiben} (disk.east);
+	\end{tikzpicture}%
+	}
+	\caption{Speicherbereiche und persistente Datenhaltung von Neo4j. Eigene Darstellung in Anlehnung an \cite{neo4j2026memory}.}
+	\label{fig:memory-architecture}
+\end{figure}
+
+Neben dem Page Cache nutzt Neo4j den Heap der \ac{JVM} für Java-Objekte sowie für Teile der Anfrage- und Transaktionsverarbeitung. Während einer Transaktion liegen noch nicht bestätigte Änderungen, Zwischenergebnisse und Resultate im Speicher. Native beziehungsweise Off-Heap-Bereiche ergänzen den Heap; die automatische Speicherbereinigung der \ac{JVM} erfasst sie nicht. Große Pfadsuchen, Sortierungen oder Aggregationen können deshalb erheblichen Speicher beanspruchen. Begrenzungen pro Transaktion und für alle gleichzeitig laufenden Transaktionen verhindern, dass einzelne Anfragen den Server vollständig auslasten \cite{neo4j2026memory}.
+
+Passt der aktive Datenbestand einschließlich der relevanten Indizes in den Page Cache, bedient Neo4j nach der Aufwärmphase den größten Teil der Lesezugriffe aus dem \ac{RAM}. Die Daten bleiben trotzdem persistent, da der Cache lediglich Store-Seiten zwischenspeichert. Neo4j kombiniert somit datenträgergestützte Dauerhaftigkeit mit speicherbasierter Beschleunigung, statt zwischen einer reinen Disk- und einer reinen In-Memory-Architektur zu wählen.
